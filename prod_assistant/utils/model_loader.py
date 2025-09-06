@@ -1,6 +1,7 @@
 import os
 import json
 import sys
+import asyncio
 from dotenv import load_dotenv
 from prod_assistant.utils.config_loader import load_config
 
@@ -45,6 +46,38 @@ class ApiKeyManager:
         if not val:
             raise KeyError(f"API key for {key} is missing")
         return val
-    
-    
+
+    class ModelLoader:
+        def __init__(self):
+            if os.getenv("ENV","local").lower != "production":
+                load_dotenv()
+                log.info("Running in LOCAL mode: .env loaded")
+            else:
+                log.info("Running in PRODUCTION mode")
+
+            self.api_key_mgr = ApiKeyManager()
+            self.config = load_config()
+            log.info("YAML config loaded", config_keys = list(self.config.keys()))
+
+
+        def load_embeddings(self):
+            try:
+                model_name = self.config["embedding_model"]["model_name"]
+                log.info("Loading embedding model", model=model_name)
+
+                try:
+                    asyncio.get_running_loop
+                except RuntimeError:
+                    asyncio.set_event_loop(asyncio.new_event_loop())
+
+                return GoogleGenerativeAIEmbeddings(
+                    model=model_name,
+                    google_api_key=self.api_key_mgr.get("GOOGLE_API_KEY")
+                )
+            except Exception as e:
+                log.error("Error loading embedding model", error = str(e))
+                raise ProductAssistantExeption("Failed to load embedding model", sys)
+
+
+
 
