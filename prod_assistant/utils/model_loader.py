@@ -24,12 +24,12 @@ class ApiKeyManager:
                 if not isinstance(parsed,dict):
                     raise ValueError("API_KEYS is not a valid JSON object")
                 self.api_keys = parsed
-                log.info("Loaded API_KEYS from ECS screat")
+                log.info("Loaded API_KEYS from ECS secret")
             except Exception as e:
                 log.warning("Failed to parse API_KEYS as JSON", error=str(e))
 
         for key in self.REQUIRED_KEYS:
-            if not self.api_keys.het(key):
+            if not self.api_keys.get(key):
                 env_val = os.getenv(key)
                 if env_val:
                     self.api_keys[key] = env_val
@@ -49,7 +49,7 @@ class ApiKeyManager:
 
 class ModelLoader:
     def __init__(self):
-        if os.getenv("ENV","local").lower != "production":
+        if os.getenv("ENV","local").lower() != "production":
             load_dotenv()
             log.info("Running in LOCAL mode: .env loaded")
         else:
@@ -66,7 +66,7 @@ class ModelLoader:
             log.info("Loading embedding model", model=model_name)
 
             try:
-                asyncio.get_running_loop
+                asyncio.get_running_loop()
             except RuntimeError:
                 asyncio.set_event_loop(asyncio.new_event_loop())
 
@@ -113,7 +113,7 @@ class ModelLoader:
             log.error("Unsupported LLM provider", provider=provider)
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
-if __name__=="main":
+if __name__=="__main__":
     loader = ModelLoader()
 
     #Test Embedding
