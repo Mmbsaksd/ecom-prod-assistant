@@ -19,6 +19,7 @@ class DataIngestion:
         pass
     def transform_data(self):
         pass
-
-    #
-    
+    def store_in_vector(self):
+        pass
+    def run_pipeline(self):
+        pass
