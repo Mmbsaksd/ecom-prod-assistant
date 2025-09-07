@@ -7,8 +7,7 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
-# Virtual environment
+.venv/
 env/
 venv/
 
@@ -26,6 +25,5 @@ venv/
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
+# Archive or temporary directories
 archive/
-
-.vscode/".env" 
