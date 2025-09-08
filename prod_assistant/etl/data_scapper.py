@@ -55,7 +55,16 @@ class FlipKartScraper:
             
 
     def scrape_flipkart_product(self, query, max_product=1, review_count=2):
-        pass
+        options = uc.ChromeOptions()
+        driver = uc.Chrome(options=options, use_subprocess=True)
+        search_url = f"https://www.flipkart.com/search?q={query.replace(' ','+')}"
+        driver.get(search_url)
+        time.sleep(4)
+
+        try:
+            driver.find_element(By.XPATH,"//nutton")
+        except Exception as e:
+            print(f"Error occuredwhile closing popup: {e}")
 
     def save_to_csv(self, data, filename="product_reviews.csv"):
         pass
