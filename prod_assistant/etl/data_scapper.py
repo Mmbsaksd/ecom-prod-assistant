@@ -26,9 +26,28 @@ class FlipKartScraper:
             driver.get(product_url)
             time.sleep(4)
             try:
-                pass
+                driver.find_element(By.XPATH, "//buttons[contains(text(),'✕')]").click()
+                time.sleep(1)
             except Exception as e:
-                print(f"Error occured while closing popup: {e}")
+                print(f"Error occurred while closing popup: {e}")
+
+            for _ in range(4):
+                ActionChains(driver).send_keys(Keys.END).perform()
+                time.sleep(1.5)
+
+            soup = BeautifulSoup(driver.page_source,"html.parser")
+            review_block = soup.select("div._27M-vq, div.col.EPCmJX, div._6K-7Co")
+            seen = set()
+            reviews = []
+
+            for block in review_block:
+                text = block.get_text(separator=" ", strip=True)
+                if text and text not in seen:
+                    reviews.append(text)
+                    seen.add(text)
+                if len(reviews>=count):
+                    break
+
         except Exception:
             reviews = []
         driver.quit()
