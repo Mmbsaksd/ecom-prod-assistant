@@ -43,8 +43,55 @@ class DataIngestion:
 
 
     def transform_data(self):
-        pass
-    def store_in_vector(self):
-        pass
+        product_list = []
+        for _, row in self.product_data.iterrows():
+            product_entry = {
+                "product_id": row["product_id"],
+                "product_title": row["product_title"],
+                "rating": row["rating"],
+                "total_reviews": row["total_reviews"],
+                "price": row["price"],
+                "top_reviews": row["top_reviews"]
+            }
+            product_list.append(product_entry)
+        documents = []
+        for entry in product_list:
+            metadata = {
+                "product_id": entry["product_id"],
+                "product_title": entry["product_title"],
+                "rating": entry["rating"],
+                "price": entry["price"]
+            }
+            doc = Document(page_content=entry["top_reviews"], metadata=metadata)
+            documents.append(doc)
+        print(f"Transformed{len(documents)} documents.")
+        return documents
+    
+    def store_in_vector(self, documents:List[Document]):
+        collection_name = self.config["astra_db"]["collection_name"]
+        vstore = AstraDBVectorStore(
+            embedding=self.model_loader.load_embeddings(),
+            collection_name=collection_name,
+            api_endpoint=self.db_api_endpoint,
+            token = self.db_application_token,
+            namespace=self.db_keyspace,
+        )
+        inserted_ids = vstore.add_documents(documents)
+        print(f"Successfully inserted{len(inserted_ids)} documents into AstraDB")
+        return vstore, inserted_ids
+
     def run_pipeline(self):
-        pass
+        documents = self.transform_data()
+        vstore = self.store_in_vector(documents)
+
+        query = "Can you tell me low budget iphone?"
+        results = vstore.similarity_search(query)
+
+        print(f"\n Sample searchresult for query: {query}")
+        for res in results:
+            print(f"Content: {res.page_content}\nMetadata: {res.metadata}\n")
+
+if __name__=="__main__":
+    ingestion = DataIngestion()
+    ingestion.run_pipeline()
+        
