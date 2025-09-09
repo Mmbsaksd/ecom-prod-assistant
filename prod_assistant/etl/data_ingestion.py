@@ -10,12 +10,23 @@ from prod_assistant.utils.config_loader import load_config
 
 class DataIngestion:
     def __init__(self):
+        print("Initializing DataIngestion pipeline...")
+        self.model_loader = ModelLoader()
+        self._load_env_variable()
+        self.csv_path = self._get_csv_path()
+        self.product_data = self._load_csv()
+        self.config = load_config()
+
+    def _load_env_variable(self):
+        load_dotenv()
+        required_vars = ["GOOGLE_API_KEY", "ASTRA_DB_API_ENDPOINT", "ASTRA_DB_APPLICATION_TOKEN","ASTRA_DB_KEYSPACE"]
+        missing_vars = [var for var in required_vars if os.getenv(var) is None]
+        if missing_vars:
+            raise EnvironmentError(f"Missing enviroment variables: {missing_vars}")
+        
+    def _get_csv_path(self):
         pass
-    def load_env_variable(self):
-        pass
-    def get_csv_path(self):
-        pass
-    def load_csv(self):
+    def _load_csv(self):
         pass
     def transform_data(self):
         pass
