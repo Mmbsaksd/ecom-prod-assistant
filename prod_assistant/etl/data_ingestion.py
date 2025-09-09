@@ -22,7 +22,7 @@ class DataIngestion:
         required_vars = ["GOOGLE_API_KEY", "ASTRA_DB_API_ENDPOINT", "ASTRA_DB_APPLICATION_TOKEN","ASTRA_DB_KEYSPACE"]
         missing_vars = [var for var in required_vars if os.getenv(var) is None]
         if missing_vars:
-            raise EnvironmentError(f"Missing enviroment variables: {missing_vars}")
+            raise EnvironmentError(f"Missing environment variables: {missing_vars}")
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
         self.db_api_endpoint = os.getenv("ASTRA_DB_API_ENDPOINT")
         self.db_application_token = os.getenv("ASTRA_DB_APPLICATION_TOKEN")
@@ -33,13 +33,16 @@ class DataIngestion:
         csv_path = os.path.join(current_dir,'data','product_reviews.csv')
         if not os.path.exists(csv_path):
             raise FileExistsError(f"CSV file not found at: {csv_path}")
-        
+        return csv_path
+    
     def _load_csv(self):
         df = pd.read_csv(self.csv_path)
         expected_columns = {'product_id','product_title','rating','total_reviews','price','top_reviews'}
 
         if not expected_columns.issubset(set(df.columns)):
             raise ValueError(f"CSV must contain columns: {expected_columns}")
+        return df
+    
 
 
     def transform_data(self):
@@ -60,11 +63,12 @@ class DataIngestion:
                 "product_id": entry["product_id"],
                 "product_title": entry["product_title"],
                 "rating": entry["rating"],
+                "total_reviews": entry["total_reviews"],
                 "price": entry["price"]
             }
             doc = Document(page_content=entry["top_reviews"], metadata=metadata)
             documents.append(doc)
-        print(f"Transformed{len(documents)} documents.")
+        print(f"Transformed {len(documents)} documents.")
         return documents
     
     def store_in_vector(self, documents:List[Document]):
@@ -77,17 +81,17 @@ class DataIngestion:
             namespace=self.db_keyspace,
         )
         inserted_ids = vstore.add_documents(documents)
-        print(f"Successfully inserted{len(inserted_ids)} documents into AstraDB")
+        print(f"Successfully inserted {len(inserted_ids)} documents into AstraDB")
         return vstore, inserted_ids
 
     def run_pipeline(self):
         documents = self.transform_data()
-        vstore = self.store_in_vector(documents)
+        vstore, _ = self.store_in_vector(documents)
 
         query = "Can you tell me low budget iphone?"
         results = vstore.similarity_search(query)
 
-        print(f"\n Sample searchresult for query: {query}")
+        print(f"\n Sample search result for query: '{query}'")
         for res in results:
             print(f"Content: {res.page_content}\nMetadata: {res.metadata}\n")
 
