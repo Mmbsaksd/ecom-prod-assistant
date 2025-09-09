@@ -23,11 +23,25 @@ class DataIngestion:
         missing_vars = [var for var in required_vars if os.getenv(var) is None]
         if missing_vars:
             raise EnvironmentError(f"Missing enviroment variables: {missing_vars}")
+        self.google_api_key = os.getenv("GOOGLE_API_KEY")
+        self.db_api_endpoint = os.getenv("ASTRA_DB_API_ENDPOINT")
+        self.db_application_token = os.getenv("ASTRA_DB_APPLICATION_TOKEN")
+        self.db_keyspace = os.getenv("ASTRA_DB_KEYSPACE")
         
     def _get_csv_path(self):
-        pass
+        current_dir = os.getcwd()
+        csv_path = os.path.join(current_dir,'data','product_reviews.csv')
+        if not os.path.exists(csv_path):
+            raise FileExistsError(f"CSV file not found at: {csv_path}")
+        
     def _load_csv(self):
-        pass
+        df = pd.read_csv(self.csv_path)
+        expected_columns = {'product_id','product_title','rating','total_reviews','price','top_reviews'}
+
+        if not expected_columns.issubset(set(df.columns)):
+            raise ValueError(f"CSV must contain columns: {expected_columns}")
+
+
     def transform_data(self):
         pass
     def store_in_vector(self):
