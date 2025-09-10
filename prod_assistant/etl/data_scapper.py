@@ -54,7 +54,7 @@ class FlipkartScraper:
         return " || ".join(reviews) if reviews else "No review found"
             
 
-    def scrape_flipkart_products(self, query, max_product=1, review_count=2):
+    def scrape_flipkart_products(self, query, max_products=1, review_count=2):
         options = uc.ChromeOptions()
         driver = uc.Chrome(options=options, use_subprocess=True)
         search_url = f"https://www.flipkart.com/search?q={query.replace(' ','+')}"
@@ -62,13 +62,13 @@ class FlipkartScraper:
         time.sleep(4)
 
         try:
-            driver.find_element(By.XPATH,"//buttons[contain(text(),'✕')]").click()
+            driver.find_element(By.XPATH,"//button[contains(text(),'✕')]").click()
         except Exception as e:
             print(f"Error occured while closing popup: {e}")
         time.sleep(2)
         products = []
         
-        items = driver.find_elements(By.CSS_SELECTOR, "div[data-id]")[:max_product]
+        items = driver.find_elements(By.CSS_SELECTOR, "div[data-id]")[:max_products]
         for item in items:
             try:
                 title = item.find_element(By.CSS_SELECTOR, "div.KzDlH").text.strip()
