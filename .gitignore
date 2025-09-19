@@ -27,3 +27,5 @@ venv/
 
 # Archive or temporary directories
 archive/
+
+data/
