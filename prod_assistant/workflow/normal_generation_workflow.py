@@ -1,11 +1,12 @@
-from langchain.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
-from prompt_library.prompts import PROMPT_REGISTRY, PromptType
-from retriever.retrieval import Retriever
-from utils.model_loader import ModelLoader
-from evaluation.ragas_eval import evaluate_context_precision, evaluate_response_relevancy
+from prod_assistant.prompt_library.prompts import PROMPT_REGISTRY, PromptType
+from prod_assistant.retriever.retrieval import Retriever
+from prod_assistant.utils.model_loader import ModelLoader
+from prod_assistant.evaluation.ragas_eval import evaluate_context_precision, evaluate_response_relevancy
 
 retriever_obj = Retriever()
 model_loader = ModelLoader()
@@ -20,7 +21,7 @@ def format_docs(docs)-> str:
             f"Title: {meta.get('product_title','NA')}\n"
             f"Price: {meta.get('price','N/A')}\n"
             f"Rating: {meta.get('rating','N/A')}\n"
-            f"Reviews: {meta.get(d.page_content.strip())}"
+            f"Reviews: {(d.page_content.strip())}"
 
         )
         formatted_chunks.append(formatted)
@@ -33,7 +34,7 @@ def build_chain(query):
     retrived_context = [format_docs(retrieved_docs)]
 
     llm = model_loader.load_llm()
-    prompt = ChatMessagePromptTemplate.from_template(
+    prompt = ChatPromptTemplate.from_template(
         PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
     )
     chain = (
