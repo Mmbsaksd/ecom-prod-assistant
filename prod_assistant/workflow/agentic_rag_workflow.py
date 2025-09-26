@@ -69,7 +69,7 @@ class AgenticRAG:
 
         prompt = PromptTemplate(
             template="""You are a grader. Question:{question}\nDocs:{docs}\n
-            Are relevant to the question? Answer yes or no""",
+            Are docs relevant to the question? Answer yes or no""",
             input_variables=["question","docs"]
         )
         chain = prompt |self.llm | StrOutputParser()
@@ -109,20 +109,20 @@ class AgenticRAG:
             lambda state: "Retriever" if "TOOL" in state["messages"][-1].content else END,
             {"Retriever":"Retriever",END:END},
         )
+
         workflow.add_conditional_edges(
-            workflow.add_conditional_edges(
-                "Retriever",
-                self._grade_documents,
-                {"generator":"Generator","rewriter":"Rewriter"}
-            )
+            "Retriever",
+            self._grade_documents,
+            {"generator":"Generator","rewriter":"Rewriter"}
         )
+
         workflow.add_edge("Generator",END)
-        workflow.add_edge("Rewriter","Assistant")
+        workflow.add_edge("Rewriter",END)
         return workflow
     
     def run(self, query:str, thread_id: str="default_thread")->str:
         result = self.app.invoke({"messages":[HumanMessage(content=query)]},
-                                 config = {"configurable":{"thread_id":thread_id}})
+                                 config = {"configurable": {"thread_id": thread_id}})
         return result["messages"][-1].content
     
 if __name__=="__main__":
