@@ -60,6 +60,20 @@ class AgenticRAG:
         docs = retriever.invoke(query)
         context = self.format_docs(docs)
         return {"messages":[HumanMessage(content=context)]}
+    
+    def _grade_documnets(self, state:AgentState)->Literal["generator","rewriter"]:
+        print("---GRADER---")
+        question = state["messages"][0].content
+        docs = state["messages"][-1].content
+
+        prompt = PromptTemplate(
+            template="""You are a grager. Question:{question}\nDocs:{docs}\n
+            Are relevant to the question? Answer yes or no""",
+            input_variables=["question","docs"]
+        )
+        chain = prompt |self.llm | StrOutputParser()
+        score = chain.invoke({"question":question,"docs":docs})
+        return "generator" if "yes" in score.lower() else "rewriter"
 
     def _generate(self, state: AgentState):
         print("---GENERATE---")
@@ -86,4 +100,21 @@ class AgenticRAG:
         workflow.add_node("Assistant", self._ai_assistant)
         workflow.add_node("Retriever", self._vector_retriever)
         workflow.add_node("Generator", self._generate)
-        workflow.add_node("Rewrite")
+        workflow.add_node("Rewrite", self._rewrite)
+
+        workflow.add_edge(START, "Assistant")
+        workflow.add_conditional_edges(
+            "Assistant",
+            lambda state: "Retriever" if "TOOL" in state["messages"][-1].content else END
+            {"Retriever":"Retriever",END:END}
+        )
+        workflow.add_conditional_edges(
+            workflow.add_conditional_edges(
+                "Rereiever",
+                self._grade_documnets,
+                {"generator":"Generator","rewriter":"Rewriter"}
+            )
+        )
+        workflow.add_edge("Generator",END)
+        workflow.add_edge("Rewriter","Assistant")
+        return workflow
