@@ -14,7 +14,7 @@ from prod_assistant.evaluation.ragas_eval import evaluate_context_precision, eva
 
 class AgenticRAG:
     class AgentState(TypedDict):
-        message: Annotated[Sequence[BaseMessage],add_messages]
+        messages: Annotated[Sequence[BaseMessage],add_messages]
 
     def __init__(self):
         self.retriever_obj = Retriever()
@@ -22,6 +22,7 @@ class AgenticRAG:
         self.llm = self.model_loader.load_llm()
         self.checkpointer = MemorySaver()
         self.workflow = self._build_workflow()
+        self.app = self.workflow.compile(checkpointer=self.checkpointer)
 
     def format_docs(self, docs)->str:
         if not docs:
@@ -61,13 +62,13 @@ class AgenticRAG:
         context = self.format_docs(docs)
         return {"messages":[HumanMessage(content=context)]}
     
-    def _grade_documnets(self, state:AgentState)->Literal["generator","rewriter"]:
+    def _grade_documents(self, state:AgentState)->Literal["generator","rewriter"]:
         print("---GRADER---")
         question = state["messages"][0].content
         docs = state["messages"][-1].content
 
         prompt = PromptTemplate(
-            template="""You are a grager. Question:{question}\nDocs:{docs}\n
+            template="""You are a grader. Question:{question}\nDocs:{docs}\n
             Are relevant to the question? Answer yes or no""",
             input_variables=["question","docs"]
         )
@@ -79,7 +80,7 @@ class AgenticRAG:
         print("---GENERATE---")
         question = state["messages"][0].content
         docs = state["messages"][-1].content
-        prompt = ChatPromptTemplate.from_messages(
+        prompt = ChatPromptTemplate.from_template(
             PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
         )
         chain = prompt | self.llm | StrOutputParser()
@@ -100,21 +101,31 @@ class AgenticRAG:
         workflow.add_node("Assistant", self._ai_assistant)
         workflow.add_node("Retriever", self._vector_retriever)
         workflow.add_node("Generator", self._generate)
-        workflow.add_node("Rewrite", self._rewrite)
+        workflow.add_node("Rewriter", self._rewrite)
 
         workflow.add_edge(START, "Assistant")
         workflow.add_conditional_edges(
             "Assistant",
-            lambda state: "Retriever" if "TOOL" in state["messages"][-1].content else END
-            {"Retriever":"Retriever",END:END}
+            lambda state: "Retriever" if "TOOL" in state["messages"][-1].content else END,
+            {"Retriever":"Retriever",END:END},
         )
         workflow.add_conditional_edges(
             workflow.add_conditional_edges(
-                "Rereiever",
-                self._grade_documnets,
+                "Retriever",
+                self._grade_documents,
                 {"generator":"Generator","rewriter":"Rewriter"}
             )
         )
         workflow.add_edge("Generator",END)
         workflow.add_edge("Rewriter","Assistant")
         return workflow
+    
+    def run(self, query:str, thread_id: str="default_thread")->str:
+        result = self.app.invoke({"messages":[HumanMessage(content=query)]},
+                                 config = {"configurable":{"thread_id":thread_id}})
+        return result["messages"][-1].content
+    
+if __name__=="__main__":
+    rag_agent = AgenticRAG()
+    answer = rag_agent.run("What is the price of iPhone 15?")
+    print("\nFinal Answer: \n",answer)
