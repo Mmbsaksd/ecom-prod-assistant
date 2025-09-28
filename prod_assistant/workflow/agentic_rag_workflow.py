@@ -48,7 +48,13 @@ class AgenticRAG:
             return {"messages":[HumanMessage(content="TOOL: retriever")]}
         
         prompt = ChatPromptTemplate.from_template(
-            "You are helpful assistant. Answer user directly. \n\nQuestion: {question}\nAnswer:"
+            """You are a product assistant. Only return the direct, final answer to the user's question, without explanations or alternative suggestions.
+
+            User Question: {question}
+            Context: {context}
+
+            Final Answer:
+            """
         )
         chain = prompt| self.llm| StrOutputParser()
         response = chain.invoke({"question": last_message})
