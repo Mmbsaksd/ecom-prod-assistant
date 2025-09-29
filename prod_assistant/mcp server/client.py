@@ -19,7 +19,7 @@ async def main():
     web_tool = next(t for t in tools if t.name=="web_search")
 
     query = "iPhone 17"
-    retrieved_result = await retriever_tools.ainvoke("query":query)
+    retrieved_result = await retriever_tools.ainvoke({"query":query})
     print("\nRetriever Result: \n", retrieved_result)
 
     if not retrieved_result.strip() or "No local result found" in retrieved_result:
@@ -27,5 +27,5 @@ async def main():
         web_result = await web_tool.ainvoke({"query":query})
         print("Web Search Result:\n",web_result)
 
-    if __name__ == "__main__":
-        asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
