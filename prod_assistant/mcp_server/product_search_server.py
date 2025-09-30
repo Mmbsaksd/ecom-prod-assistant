@@ -1,5 +1,5 @@
 from mcp.server.fastmcp import FastMCP
-from retriever.retrieval import Retriever
+from prod_assistant.retriever.retrieval import Retriever
 from langchain_community.tools import DuckDuckGoSearchRun
 
 mcp = FastMCP("hybrid_search")
@@ -41,9 +41,9 @@ async def get_product_info(query:str)-> str:
 @mcp.tool()
 async def web_search(query:str)->str:
     try:
-        pass
+        return duckduckgo.run(query)
     except Exception as e:
         return f"Error during web search: {str(e)}"
 
 if __name__== "__main__":
-    mcp.run(transport="streamable-http")    
+    mcp.run(transport="stdio")    
