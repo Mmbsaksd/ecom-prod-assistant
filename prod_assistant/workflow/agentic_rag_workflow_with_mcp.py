@@ -78,11 +78,11 @@ class AgenticRAG:
         return {"messages": [HumanMessage(content=response)]}
     
     def _vector_retriever(self, state: AgentState):
-        print("---RETRIEVER---")
+        print("---RETRIEVER(MCP)---")
         query = state["messages"][-1].content
-        retriever = self.retriever_obj.load_retriever()
-        docs = retriever.invoke(query)
-        context = self.format_docs(docs)
+        tool = next(t for t in self.mcp_tools if t.name=="get_product_info")
+        result = asyncio.run(tool.ainvoke({"query":query}))
+        context = result if result else "No data"
         return {"messages":[HumanMessage(content=context)]}
     
     def _grade_documents(self, state:AgentState)->Literal["generator","rewriter"]:
