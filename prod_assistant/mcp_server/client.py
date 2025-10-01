@@ -1,14 +1,13 @@
 import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
+import sys
 
 async def main():
     client = MultiServerMCPClient({
         "hybrid_search": {
-            "command":"python",
-            "args":[
-                r"D:\Sunny_savitha\ecom-prod-assistant\prod_assistant\mcp server\product_search_server.py"
-                ],
-            "transport":"stdio"
+            "command": sys.executable,  # use same Python from venv
+            "args": ["-m", "prod_assistant.mcp_server.product_search_server"],  # run server as module
+            "transport": "stdio",
         }
     })
 
