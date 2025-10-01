@@ -30,10 +30,15 @@ def format_doc(docs)-> str:
 async def get_product_info(query:str)-> str:
     try:
         docs = retriever.invoke(query)
-        context = format_doc(docs)
 
-        if not context.strip():
-            return "No local result found"
+        filtered_docs = [
+            d for d in docs 
+            if any(word in d.metadata.get("product_title","").lower()
+                   for word in query.lower().split())
+        ]
+        if not filtered_docs:
+            return "No exact result found"
+        context = format_doc(filtered_docs)
         return context
     except Exception as e:
         return f"Error retriving product info: {str(e)}"
