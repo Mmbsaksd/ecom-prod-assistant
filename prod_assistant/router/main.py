@@ -8,4 +8,25 @@ from langchain_core.messages import HumanMessage
 from workflow.agentic_rag_workflow import AgenticRAG
 
 app = FastAPI()
-app.mount("/static")
+app.mount("/static", StaticFiles(directory="static"), name='static')
+templates = Jinja2Templates(directory='templates')
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins = ["*"],
+  allow_credentials = True,
+  allow_methods = ["*"],
+  allow_headers = ["*"]
+ )
+
+@app.get("/",response_class=HTMLResponse)
+async def index(request:Request):
+    return templates.TemplateResponse("chat.html",{"request":request})
+
+@app.post("/get",response_class=HTMLResponse)
+async def chat(msg:str = Form(...)):
+    rag_agent = AgenticRAG()
+    answer = rag_agent.run(msg)
+    print(f"Agentic Response: {answer}")
+    return answer
+
