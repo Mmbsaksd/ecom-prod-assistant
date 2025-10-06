@@ -60,7 +60,7 @@ class AgenticRAG:
     def _ai_assistant(self, state:AgentState):
         print("---CALL ASSISTANT---")
         messages = state["messages"]
-        last_message = messages[-1].content
+        last_message = messages[-1].content if messages else ""
 
         if any(word in last_message.lower() for word in ["price","review","product"]):
             return {"messages":[HumanMessage(content="TOOL: retriever")]}
@@ -75,15 +75,30 @@ class AgenticRAG:
             """
         )
         chain = prompt| self.llm| StrOutputParser()
-        response = chain.invoke({"question": last_message})
+        safe_context = ""
+        try:
+            response = chain.invoke({"question": last_message, "context": safe_context})
+        except Exception as e:
+            print("Error invoking assistant chain:", e)
+            response = "Sorry — I couldn't generate an answer right now."
         return {"messages": [HumanMessage(content=response)]}
     
     def _vector_retriever(self, state: AgentState):
         print("---RETRIEVER(MCP)---")
         query = state["messages"][-1].content
-        tool = next(t for t in self.mcp_tools if t.name=="get_product_info")
-        result = asyncio.run(tool.ainvoke({"query":query}))
-        context = result if result else "No data"
+
+        product_tool = next(t for t in self.mcp_tools if t.name=="get_product_info")
+        web_tool = next(t for t in self.mcp_tools if t.name=="web_search")
+
+        result = asyncio.run(product_tool.ainvoke({"query":query}))
+
+        if not result or "no exact result" in result.lower() or "no data" in result.lower():
+            print("---No database result, running web search---")
+            web_result = asyncio.run(web_tool.ainvoke({"query":query}))
+            context = web_result
+        else:
+            context = result
+
         return {"messages":[HumanMessage(content=context)]}
     
     def _grade_documents(self, state:AgentState)->Literal["generator","rewriter"]:
@@ -151,5 +166,5 @@ class AgenticRAG:
     
 if __name__=="__main__":
     rag_agent = AgenticRAG()
-    answer = rag_agent.run("What is the price of samsung s25?")
+    answer = rag_agent.run("What is the price of iPhone 15?")
     print("\nFinal Answer: \n",answer)
