@@ -1,7 +1,7 @@
 from mcp.server.fastmcp import FastMCP
 from prod_assistant.retriever.retrieval import Retriever
 from langchain_community.tools import DuckDuckGoSearchRun
-
+import re
 mcp = FastMCP("hybrid_search")
 
 retriever_obj = Retriever()
@@ -25,6 +25,8 @@ def format_doc(docs)-> str:
         formatted_chunk.append(formatted)
         
     return "\n\n---\n\n".join(formatted_chunk)
+
+
 
 @mcp.tool()
 async def get_product_info(query:str)-> str:

@@ -1,3 +1,4 @@
+import sys
 from typing import Annotated, Sequence, TypedDict, Literal
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
@@ -27,8 +28,8 @@ class AgenticRAG:
         self.mcp_client = MultiServerMCPClient(
             {
                 "product_retriever":{
-                    "command":"python",
-                    "args": ["prod_assistant\mcp_server\product_search_server.py"],
+                    "command":sys.executable,
+                    "args": ["-m", "prod_assistant.mcp_server.product_search_server"],
                     "transport":"stdio"
                 }
                 
