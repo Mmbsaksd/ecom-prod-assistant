@@ -2,13 +2,22 @@ astra_db:
   collection_name: "ecommercedata"
 
 embedding_model:
-  provider: "google"
-  model_name: "models/text-embedding-004"
+  provider: "azure"
+  deployment_name_env: "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"
+  api_version_env: "AZURE_OPENAI_API_VERSION"
+
 
 retriever:
   top_k: 10
 
 llm:
+  azure:
+    provider: "azure"
+    deployment_name_env: "AZURE_OPENAI_DEPLOYMENT_NAME"
+    api_version_env: "AZURE_OPENAI_API_VERSION"
+    temperature: 0
+    max_output_tokens: 2048
+
   groq:
     provider: "groq"
     model_name: "deepseek-r1-distill-llama-70b"

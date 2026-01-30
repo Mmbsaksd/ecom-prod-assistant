@@ -5,18 +5,32 @@ import asyncio
 from dotenv import load_dotenv
 from prod_assistant.utils.config_loader import load_config
 
+from langchain_openai import AzureChatOpenAI
 from langchain_groq import ChatGroq
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+from langchain_openai import AzureOpenAIEmbeddings
+
 
 from prod_assistant.logger import GLOBAL_LOGGER as log
 from prod_assistant.exception.custom_exception import ProductAssistantException
 
 class ApiKeyManager:
-    REQUIRED_KEYS = ["GROQ_API_KEY", "GOOGLE_API_KEY"]
+    PROVIDER_KEYS = {
+            "groq": ["GROQ_API_KEY"],
+            "google": ["GOOGLE_API_KEY"],
+            "azure": [
+                "AZURE_OPENAI_API_KEY",
+                "AZURE_OPENAI_ENDPOINT",
+                "AZURE_OPENAI_DEPLOYMENT_NAME",
+                "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME",
+                "AZURE_OPENAI_API_VERSION",
+            ],
+        }
 
     def __init__(self):
         self.api_keys = {}
         raw = os.getenv("API_KEYS")
+        self.provider = os.getenv("LLM_PROVIDER", "azure").lower()
 
         if raw:
             try:
@@ -27,20 +41,28 @@ class ApiKeyManager:
                 log.info("Loaded API_KEYS from ECS secret")
             except Exception as e:
                 log.warning("Failed to parse API_KEYS as JSON", error=str(e))
+        required_keys = self.PROVIDER_KEYS.get(self.provider)
 
-        for key in self.REQUIRED_KEYS:
+        if not required_keys:
+            raise ValueError(f"Unsupported LLM_PROVIDER: {self.provider}")
+        
+        for key in required_keys:
             if not self.api_keys.get(key):
                 env_val = os.getenv(key)
                 if env_val:
                     self.api_keys[key] = env_val
                     log.info(f"Loaded {key} from individual env var")
-
-        missing = [k for k in self.REQUIRED_KEYS if not self.api_keys.get(k)]
+            
+        missing = [k for k in required_keys if not self.api_keys.get(k)]
         if missing:
-            log.error("Missing required API keys", missing_key=missing)
-            raise ProductAssistantException("Missing API keys", sys)
-        log.info("API keys loaded", keys = {k: v[:6]+"..." for k,v in self.api_keys.items()})
+            if self.provider == "azure":
+                log.error("Azure API keys missing", missing_keys=missing)
+                raise ProductAssistantException("Azure API keys missing", sys)
+            else:
+                log.warning("Non-primary provider keys missing", missing_keys=missing)
 
+
+        log.info("API keys loaded", provider=self.provider, available_keys=list(self.api_keys.keys()))
     def get(self, key:str)->str:
         val = self.api_keys.get(key)
         if not val:
@@ -62,27 +84,31 @@ class ModelLoader:
 
     def load_embeddings(self):
         try:
-            model_name = self.config["embedding_model"]["model_name"]
-            log.info("Loading embedding model", model=model_name)
+            log.info("Loading Azure OpenAI embedding model")
 
+            # Ensure event loop exists (Windows / async safety)
             try:
                 asyncio.get_running_loop()
             except RuntimeError:
                 asyncio.set_event_loop(asyncio.new_event_loop())
 
-            return GoogleGenerativeAIEmbeddings(
-                model=model_name,
-                google_api_key=self.api_key_mgr.get("GOOGLE_API_KEY")
+            return AzureOpenAIEmbeddings(
+                azure_deployment=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME"),
+                api_version=self.api_key_mgr.get("AZURE_OPENAI_API_VERSION"),
+                azure_endpoint=self.api_key_mgr.get("AZURE_OPENAI_ENDPOINT"),
+                api_key=self.api_key_mgr.get("AZURE_OPENAI_API_KEY"),
             )
+
         except Exception as e:
-            log.error("Error loading embedding model", error = str(e))
-            raise ProductAssistantException("Failed to load embedding model", sys)
+            log.error("Error loading Azure embedding model", error=str(e))
+            raise ProductAssistantException("Failed to load Azure embedding model", sys)
+
 
 
 
     def load_llm(self):
         llm_block = self.config['llm']
-        provider_key = os.getenv("LLM_PROVIDER", "google")
+        provider_key = os.getenv("LLM_PROVIDER", "azure").lower()
 
         if provider_key not in llm_block:
             log.error("LLM provider not found in config", provider = provider_key)
@@ -96,7 +122,19 @@ class ModelLoader:
 
         log.info("Loading LLM", provider = provider, model = model_name)
 
-        if provider=="google":
+        if provider == "azure":
+            
+            return AzureChatOpenAI(
+                azure_deployment=self.api_key_mgr.get("AZURE_OPENAI_DEPLOYMENT_NAME"),
+                api_version=self.api_key_mgr.get("AZURE_OPENAI_API_VERSION"),
+                azure_endpoint=self.api_key_mgr.get("AZURE_OPENAI_ENDPOINT"),
+                api_key=self.api_key_mgr.get("AZURE_OPENAI_API_KEY"),
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+
+        
+        elif provider=="google":
             return ChatGoogleGenerativeAI(
                 model=model_name,
                 google_api_key = self.api_key_mgr.get("GOOGLE_API_KEY"),

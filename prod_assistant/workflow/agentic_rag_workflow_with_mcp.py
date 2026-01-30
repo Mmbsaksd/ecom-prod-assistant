@@ -1,4 +1,5 @@
 import sys
+import os
 import re
 from typing import Annotated, Sequence, TypedDict, Literal
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -15,6 +16,8 @@ from langgraph.checkpoint.memory import MemorySaver
 import asyncio
 from prod_assistant.evaluation.ragas_eval import evaluate_context_precision, evaluate_response_relevancy
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from prod_assistant.logger import GLOBAL_LOGGER as log
+from prod_assistant.utils.astradb_writer import AstraWriter
 
 class AgenticRAG:
     class AgentState(TypedDict):
@@ -38,7 +41,22 @@ class AgenticRAG:
             }
         )
 
-        self.mcp_tools = asyncio.run(self.mcp_client.get_tools())
+        self.mcp_tools = []
+
+        if os.getenv("ENABLE_MCP", "false").lower() == "true":
+            try:
+                self.mcp_tools = asyncio.run(self.mcp_client.get_tools())
+                log.info("MCP tools loaded", tools=[getattr(t,'name',None) for t in self.mcp_tools])
+            except Exception as e:
+                log.warning("MCP failed to initialize, continuing without MCP", error=str(e))
+
+        # Astra writer is optional and must not crash the agent
+        try:
+            self.astra_writer = AstraWriter()
+        except Exception as e:
+            log.warning("Failed to instantiate AstraWriter", error=str(e))
+            self.astra_writer = None
+
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile(checkpointer=self.checkpointer)
 
@@ -85,7 +103,7 @@ class AgenticRAG:
         return {"messages": [HumanMessage(content=response)]}
     
     def _vector_retriever(self, state: AgentState):
-        print("---RETRIEVER(MCP)---")
+        log.info("---RETRIEVER(MCP)---")
         raw = state["messages"][-1].content
 
         if raw.startswith("TOOL: retriever||"):
@@ -93,26 +111,66 @@ class AgenticRAG:
         else:
             query = raw
 
-        product_tool = next(t for t in self.mcp_tools if t.name=="get_product_info")
-        web_tool = next(t for t in self.mcp_tools if t.name=="web_search")
+        product_tool = next(
+            (t for t in self.mcp_tools if getattr(t, "name", None) == "get_product_info"),
+            None
+        )
+        web_tool = next(
+            (t for t in self.mcp_tools if getattr(t, "name", None) == "web_search"),
+            None
+        )
 
-        result = asyncio.run(product_tool.ainvoke({"query":query}))
+        result = None
 
-        if not result or not any(keyword in result.lower() for keyword in [
-        "price", "product", "model", "details", "specification", "features", "buy", "cost"
+        # Prefer product tool if available
+        if product_tool:
+            try:
+                result = asyncio.run(product_tool.ainvoke({"query": query}))
+            except Exception as e:
+                log.warning("Product tool invocation failed, falling back", error=str(e))
+                result = None
+        else:
+            log.info("Product tool not available - will attempt fallbacks")
+
+        # If product result not useful, try web search if available
+        if not result or not any(keyword in (result or "").lower() for keyword in [
+            "price", "product", "model", "details", "specification", "features", "buy", "cost"
         ]):
-            print("---No database result, running web search---")
-            web_result = asyncio.run(web_tool.ainvoke({"query":query}))
-            context = web_result
+            log.info("No relevant product result from MCP product tool")
+            if web_tool:
+                try:
+                    log.info("Attempting MCP web search")
+                    web_result = asyncio.run(web_tool.ainvoke({"query": query}))
+                    context = web_result
+                except Exception as e:
+                    log.warning("Web tool invocation failed, falling back to local retriever", error=str(e))
+                    context = None
+            else:
+                log.info("Web tool not available - falling back to local vector retriever")
+                context = None
+
+            # If still no context, fall back to local Astra retriever (if configured)
+            if not context:
+                try:
+                    retriever_results = self.retriever_obj.call_retriever(query)
+                    context = self.format_docs(retriever_results)
+                except Exception as e:
+                    log.warning("Local retriever failed to provide context", error=str(e))
+                    context = "No relevant documents found"
         else:
             context = result
 
-        return {"messages":[HumanMessage(content=context)]}
+        return {"messages": [HumanMessage(content=context)]}
     
     def _grade_documents(self, state:AgentState)->Literal["generator","rewriter"]:
         print("---GRADER---")
         question = state["messages"][0].content
         docs = state["messages"][-1].content
+
+        # Short-circuit: if retriever returned no relevant documents, avoid infinite rewrite loops
+        if isinstance(docs, str) and docs.strip().lower() in ("no relevant documents found", ""):
+            log.info("Docs empty or not found - forcing generator to avoid rewrite loop")
+            return "generator"
 
         prompt = PromptTemplate(
             template="""You are a grader. Question:{question}\nDocs:{docs}\n
@@ -152,6 +210,19 @@ class AgenticRAG:
         chain = prompt | self.llm | StrOutputParser()
         response = chain.invoke({"context":docs, "question":question})
         safe_response = self.clean_response(response, max_chars=250)
+
+        # Attempt to persist interaction to AstraDB (non-blocking, must not crash)
+        try:
+            if hasattr(self, "astra_writer") and getattr(self.astra_writer, "enabled", False):
+                try:
+                    saved = self.astra_writer.save_interaction(question, docs, safe_response)
+                    log.info("Astra save attempted", saved=saved)
+                except Exception as e:
+                    log.warning("Unexpected error while saving to Astra", error=str(e))
+        except Exception as e:
+            # Broad safety: ensure any persistence errors do not break response
+            log.warning("Failed during Astra persistence attempt", error=str(e))
+
         return {"messages":[HumanMessage(content=safe_response)]}
     
 
